@@ -168,10 +168,10 @@
                     </div>
                     
                     <div class="bg-emerald-950/80 px-4 py-2.5 rounded-xl border border-emerald-700/60 text-right">
-                        <span class="text-[10px] text-emerald-300 uppercase tracking-wider font-bold block">Status Spreadsheet Target</span>
+                        <span class="text-[10px] text-emerald-300 uppercase tracking-wider font-bold block">Status Cloud Database</span>
                         <span class="text-xs font-mono text-emerald-100 flex items-center justify-end gap-1.5 mt-0.5">
-                            <span class="w-2 h-2 rounded-full" :class="scriptUrl ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
-                            {{ scriptUrl ? 'Spreadsheet Terhubung' : 'Pending Setting Webhook' }}
+                            <span class="w-2 h-2 rounded-full" :class="isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+                            {{ isCloudConnected ? 'Realtime Sync HP & Laptop' : 'Connecting Cloud...' }}
                         </span>
                     </div>
                 </div>
@@ -812,8 +812,27 @@
 
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         const { createApp } = Vue;
+
+        // Firebase Environment & Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mtsn1-malang-koperasi';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo-app.firebaseapp.com",
+            projectId: "demo-app",
+            storageBucket: "demo-app.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
         createApp({
             data() {
@@ -827,6 +846,8 @@
                     isSubmitting: false,
                     isSyncing: false,
                     isTesting: false,
+                    isCloudConnected: false,
+                    currentUser: null,
 
                     scriptUrl: localStorage.getItem('mtsn1_script_url') || '',
 
@@ -957,18 +978,117 @@ function handleRequest(e) {
                 }
             },
 
-            mounted() {
+            async mounted() {
                 if (this.staffList.length === 0) {
                     this.staffList = [...this.defaultStaff];
-                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
                 }
                 if (this.catalog.length === 0) {
                     this.catalog = [...this.defaultCatalog];
-                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
                 }
+
+                // Initialize Firebase Authentication & Realtime Cloud Listeners
+                await this.initCloudSync();
             },
 
             methods: {
+                async initCloudSync() {
+                    try {
+                        let userCred;
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            userCred = await signInAnonymously(auth);
+                        }
+                        this.currentUser = userCred.user;
+                        this.isCloudConnected = true;
+
+                        // 1. Listen to Staff List Changes Across Devices
+                        const staffDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'staff');
+                        onSnapshot(staffDocRef, (snapshot) => {
+                            if (snapshot.exists()) {
+                                const data = snapshot.data();
+                                if (data && Array.isArray(data.list) && data.list.length > 0) {
+                                    this.staffList = data.list;
+                                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                                }
+                            } else {
+                                this.saveStaffToCloud(this.staffList);
+                            }
+                        }, (error) => console.error("Staff Cloud Error:", error));
+
+                        // 2. Listen to Catalog Changes Across Devices
+                        const catalogDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'catalog');
+                        onSnapshot(catalogDocRef, (snapshot) => {
+                            if (snapshot.exists()) {
+                                const data = snapshot.data();
+                                if (data && Array.isArray(data.items) && data.items.length > 0) {
+                                    this.catalog = data.items;
+                                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                                }
+                            } else {
+                                this.saveCatalogToCloud(this.catalog);
+                            }
+                        }, (error) => console.error("Catalog Cloud Error:", error));
+
+                        // 3. Listen to Orders Changes Across Devices
+                        const ordersCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'orders');
+                        onSnapshot(ordersCollRef, (snapshot) => {
+                            const cloudOrders = [];
+                            snapshot.forEach(docSnap => {
+                                cloudOrders.push(docSnap.data());
+                            });
+                            cloudOrders.sort((a, b) => (b.id || 0) - (a.id || 0));
+                            if (cloudOrders.length > 0 || snapshot.metadata.fromCache === false) {
+                                this.orders = cloudOrders;
+                                localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
+                            }
+                        }, (error) => console.error("Orders Cloud Error:", error));
+
+                    } catch (err) {
+                        console.error("Cloud Sync Auth Failed:", err);
+                    }
+                },
+
+                async saveStaffToCloud(list) {
+                    if (!this.currentUser) return;
+                    try {
+                        const staffDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'staff');
+                        await setDoc(staffDocRef, { list: list });
+                    } catch (e) {
+                        console.error("Error saving staff to cloud:", e);
+                    }
+                },
+
+                async saveCatalogToCloud(items) {
+                    if (!this.currentUser) return;
+                    try {
+                        const catalogDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'catalog');
+                        await setDoc(catalogDocRef, { items: items });
+                    } catch (e) {
+                        console.error("Error saving catalog to cloud:", e);
+                    }
+                },
+
+                async saveOrderToCloud(order) {
+                    if (!this.currentUser) return;
+                    try {
+                        const orderDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', String(order.id));
+                        await setDoc(orderDocRef, order);
+                    } catch (e) {
+                        console.error("Error saving order to cloud:", e);
+                    }
+                },
+
+                async deleteOrderFromCloud(orderId) {
+                    if (!this.currentUser) return;
+                    try {
+                        const orderDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', String(orderId));
+                        await deleteDoc(orderDocRef);
+                    } catch (e) {
+                        console.error("Error deleting order from cloud:", e);
+                    }
+                },
+
                 formatRupiah(val) {
                     return new Intl.NumberFormat('id-ID', {
                         style: 'currency',
@@ -977,7 +1097,7 @@ function handleRequest(e) {
                     }).format(val || 0);
                 },
 
-                // Cart Operations (Multi-Item Selection with robust string ID matching)
+                // Cart Operations
                 getItemCartQty(itemId) {
                     if (itemId === null || itemId === undefined) return 0;
                     const found = this.selectedCartItems.find(i => String(i.id) === String(itemId));
@@ -1069,7 +1189,6 @@ function handleRequest(e) {
                     this.showToast('Barang custom ditambahkan ke pesanan!', 'success');
                 },
 
-                // Submit Form
                 async submitOrder() {
                     const finalNama = this.orderForm.selectedNama === 'CUSTOM' ? this.orderForm.customNama : this.orderForm.selectedNama;
                     
@@ -1105,15 +1224,15 @@ function handleRequest(e) {
                         if (ok) newOrder.synced = true;
                     }
 
-                    this.orders.unshift(newOrder);
-                    this.saveOrders();
+                    // Save to local & Cloud Firestore
+                    await this.saveOrderToCloud(newOrder);
 
                     this.isSubmitting = false;
 
                     if (newOrder.synced) {
-                        this.showToast('Pesanan berhasil dikirim & langsung tercatat di Spreadsheet!', 'success');
+                        this.showToast('Pesanan berhasil dikirim ke Cloud & Spreadsheet!', 'success');
                     } else {
-                        this.showToast('Pesanan tersimpan lokal dengan status "Tunggu".', 'success');
+                        this.showToast('Pesanan tersimpan di Cloud Database (Status: Tunggu).', 'success');
                     }
 
                     // Reset form & cart
@@ -1164,19 +1283,14 @@ function handleRequest(e) {
                     this.showToast('Anda telah keluar dari Mode Admin.', 'success');
                 },
 
-                updateOrderStatus(order) {
-                    this.saveOrders();
+                async updateOrderStatus(order) {
+                    this.saveOrderToCloud(order);
                     this.showToast(`Status pesanan ${order.namaPemesan} diubah ke: ${order.status}`, 'success');
                 },
 
-                deleteOrder(id) {
-                    this.orders = this.orders.filter(o => o.id !== id);
-                    this.saveOrders();
-                    this.showToast('Pesanan dihapus', 'error');
-                },
-
-                saveOrders() {
-                    localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
+                async deleteOrder(id) {
+                    await this.deleteOrderFromCloud(id);
+                    this.showToast('Pesanan dihapus dari Cloud Database', 'error');
                 },
 
                 // Excel Upload for Staff List
@@ -1206,8 +1320,8 @@ function handleRequest(e) {
 
                             if (extracted.length > 0) {
                                 this.staffList = extracted;
-                                localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
-                                this.showToast(`Berhasil mengimpor ${extracted.length} nama dari file Excel!`, 'success');
+                                this.saveStaffToCloud(this.staffList);
+                                this.showToast(`Berhasil mengimpor ${extracted.length} nama & disinkronkan ke Cloud!`, 'success');
                             } else {
                                 this.showToast('Tidak ditemukan data nama pada file Excel.', 'error');
                             }
@@ -1222,21 +1336,21 @@ function handleRequest(e) {
                 addSingleStaff() {
                     if (this.newStaffNameInput.trim()) {
                         this.staffList.push(this.newStaffNameInput.trim());
-                        localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                        this.saveStaffToCloud(this.staffList);
                         this.newStaffNameInput = '';
-                        this.showToast('Nama guru/pegawai ditambahkan!', 'success');
+                        this.showToast('Nama guru/pegawai ditambahkan ke Cloud!', 'success');
                     }
                 },
 
                 removeStaffName(index) {
                     this.staffList.splice(index, 1);
-                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                    this.saveStaffToCloud(this.staffList);
                 },
 
                 resetStaffToDefault() {
                     this.staffList = [...this.defaultStaff];
-                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
-                    this.showToast('Daftar nama dikembalikan ke bawaan MTsN 1 Malang.', 'success');
+                    this.saveStaffToCloud(this.staffList);
+                    this.showToast('Daftar nama dikembalikan ke bawaan & tersimpan di Cloud.', 'success');
                 },
 
                 // Catalog Admin
@@ -1259,14 +1373,14 @@ function handleRequest(e) {
                     } else {
                         this.catalog.push({ ...this.catalogForm });
                     }
-                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                    this.saveCatalogToCloud(this.catalog);
                     this.showCatalogModal = false;
-                    this.showToast('Katalog diperbarui!', 'success');
+                    this.showToast('Katalog diperbarui & tersimpan di Cloud!', 'success');
                 },
 
                 deleteCatalogItem(id) {
                     this.catalog = this.catalog.filter(c => c.id !== id);
-                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                    this.saveCatalogToCloud(this.catalog);
                 },
 
                 // Spreadsheet Webhook Settings
@@ -1301,7 +1415,6 @@ function handleRequest(e) {
                         const ok = await this.sendToSheets(o);
                         if (ok) o.synced = true;
                     }
-                    this.saveOrders();
                     this.isSyncing = false;
                     this.showToast('Semua data disinkronkan ke Spreadsheet!', 'success');
                 },
