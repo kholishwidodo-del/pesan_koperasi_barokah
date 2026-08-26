@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pemesanan MTsN 1 Kota Malang & Sync Spreadsheet</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Vue.js 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- SheetJS for Excel Uploading (.xlsx / .xls / .csv) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                        },
+                        mtsn: {
+                            50: '#ecfdf5',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [v-cloak] { display: none; }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+    <div id="app" v-cloak class="flex-grow flex flex-col">
+        
+        <!-- Header & Navbar -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16 items-center">
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-emerald-700 text-white p-2.5 rounded-xl shadow-md">
+                            <i class="fa-solid fa-school-flag text-xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="font-extrabold text-lg leading-tight text-slate-900 flex items-center gap-1.5">
+                                Koperasi Barokah MTsN 1 Kota Malang
+                            </h1>
+                            <p class="text-xs text-slate-500 font-medium">Sistem Pemesanan Logistik & Konsumsi</p>
+                        </div>
+                    </div>
+
+                    <!-- Navigation Tabs -->
+                    <nav class="hidden md:flex space-x-1 bg-slate-100 p-1 rounded-xl">
+                        <button 
+                            @click="activeTab = 'order'"
+                            :class="activeTab === 'order' ? 'bg-white text-emerald-700 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'"
+                            class="px-4 py-2 rounded-lg text-sm transition-all duration-200 flex items-center space-x-2">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                            <span>Form Pemesanan</span>
+                            <span v-if="cartItemsCount > 0" class="bg-emerald-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                                {{ cartItemsCount }}
+                            </span>
+                        </button>
+
+                        <button 
+                            @click="goToAdminTab"
+                            :class="activeTab === 'admin' ? 'bg-white text-emerald-700 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'"
+                            class="px-4 py-2 rounded-lg text-sm transition-all duration-200 flex items-center space-x-2">
+                            <i class="fa-solid fa-user-shield"></i>
+                            <span>Panel Admin</span>
+                            <span v-if="isAdminLoggedIn" class="bg-amber-500 text-slate-950 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded font-bold">Aktif</span>
+                        </button>
+                    </nav>
+
+                    <!-- User / Admin Auth Status -->
+                    <div class="flex items-center space-x-3">
+                        <div v-if="isAdminLoggedIn" class="hidden sm:flex items-center space-x-2">
+                            <span class="bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300 flex items-center gap-1">
+                                <i class="fa-solid fa-shield-halved"></i> Mode Admin
+                            </span>
+                            <button @click="logoutAdmin" class="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2.5 py-1.5 rounded-lg font-semibold transition">
+                                Keluar
+                            </button>
+                        </div>
+                        <button v-else @click="openAdminAuthModal" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                            <i class="fa-solid fa-lock text-slate-400"></i>
+                            <span>Login Admin</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Navigation -->
+            <div class="md:hidden flex overflow-x-auto border-t border-slate-200 bg-slate-50 px-2 py-1.5 space-x-1 custom-scrollbar">
+                <button 
+                    @click="activeTab = 'order'"
+                    :class="activeTab === 'order' ? 'bg-white text-emerald-700 font-semibold border border-slate-200' : 'text-slate-600'"
+                    class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap flex items-center space-x-1.5">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span>Form Order</span>
+                    <span v-if="cartItemsCount > 0" class="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                        {{ cartItemsCount }}
+                    </span>
+                </button>
+                <button 
+                    @click="goToAdminTab"
+                    :class="activeTab === 'admin' ? 'bg-white text-emerald-700 font-semibold border border-slate-200' : 'text-slate-600'"
+                    class="px-3 py-1.5 rounded-lg text-xs whitespace-nowrap flex items-center space-x-1.5">
+                    <i class="fa-solid fa-user-shield"></i>
+                    <span>Admin Panel</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            
+            <!-- ALERT / TOAST MESSAGE -->
+            <div v-if="toast.show" 
+                 :class="toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'"
+                 class="fixed bottom-5 right-5 z-50 p-4 rounded-xl border shadow-xl flex items-center space-x-3 transition-all duration-300 transform max-w-md">
+                <i :class="toast.type === 'error' ? 'fa-circle-xmark text-red-500' : 'fa-circle-check text-emerald-500'" class="fa-solid text-xl"></i>
+                <div class="flex-grow text-sm font-medium">{{ toast.message }}</div>
+                <button @click="toast.show = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- ================= TAB 1: FORM PEMESANAN (PEMESAN VIEW) ================= -->
+            <div v-show="activeTab === 'order'" class="space-y-6">
+                
+                <div class="bg-emerald-900 text-white rounded-2xl p-6 shadow-md border border-emerald-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <div class="flex items-center space-x-2 text-emerald-300 font-semibold text-xs uppercase tracking-wider mb-1">
+                            <i class="fa-solid fa-building-columns"></i>
+                            <span>Formulir Pemesanan </span>
+                        </div>
+                        <h2 class="text-xl sm:text-2xl font-bold">Guru & Pegawai MTsN 1 Kota Malang</h2>
+                        <p class="text-emerald-200 text-xs sm:text-sm mt-0.5">Pilih nama pemesan dan tentukan item barang yang ingin dipesan (bisa lebih dari 1 barang).</p>
+                    </div>
+                    
+                    <div class="bg-emerald-950/80 px-4 py-2.5 rounded-xl border border-emerald-700/60 text-right">
+                        <span class="text-[10px] text-emerald-300 uppercase tracking-wider font-bold block">Status Spreadsheet Target</span>
+                        <span class="text-xs font-mono text-emerald-100 flex items-center justify-end gap-1.5 mt-0.5">
+                            <span class="w-2 h-2 rounded-full" :class="scriptUrl ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+                            {{ scriptUrl ? 'Spreadsheet Terhubung' : 'Pending Setting Webhook' }}
+                        </span>
+                    </div>
+                </div>
+
+                <form @submit.prevent="submitOrder" class="space-y-6">
+                    
+                    <!-- 1. IDENTITAS PEMESAN (DROPDOWN NAMA GURU & PEGAWAI) -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="border-b border-slate-100 pb-3 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-900 text-base flex items-center space-x-2">
+                                <i class="fa-solid fa-user-check text-emerald-600"></i>
+                                <span>1. Pilih Identitas Pemesan</span>
+                            </h3>
+                            <span class="text-xs text-slate-400">Total Daftar: {{ staffList.length }} Nama</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                    Nama Guru / Pegawai <span class="text-red-500">*</span>
+                                </label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-solid fa-id-card"></i>
+                                    </div>
+                                    <select 
+                                        v-model="orderForm.selectedNama" 
+                                        required
+                                        class="block w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 text-sm appearance-none transition">
+                                        <option value="" disabled>-- Pilih Nama Guru / Pegawai --</option>
+                                        <option v-for="name in staffList" :key="name" :value="name">{{ name }}</option>
+                                        <option value="CUSTOM">+ Nama Lain / Input Manual</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Extra Custom Name Input if "CUSTOM" Selected -->
+                            <div v-if="orderForm.selectedNama === 'CUSTOM'">
+                                <label class="block text-sm font-semibold text-amber-800 mb-1">
+                                    Ketik Nama Pemesan Manual <span class="text-red-500">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    v-model="orderForm.customNama" 
+                                    required 
+                                    placeholder="Masukkan nama lengkap & gelar..."
+                                    class="block w-full px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500 text-sm transition"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. PEMILIHAN BARANG (KATALOG SEMUA TAMPIL - BISA PILIH LEBIH DARI 1) -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="border-b border-slate-100 pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base flex items-center space-x-2">
+                                    <i class="fa-solid fa-boxes-stacked text-emerald-600"></i>
+                                    <span>2. Pilih Barang Dipesan (Bisa Lebih Dari 1 Item)</span>
+                                </h3>
+                                <p class="text-xs text-slate-500">Klik tombol tambah pada barang yang ingin dipesan.</p>
+                            </div>
+
+                            <div class="flex items-center space-x-2">
+                                <input 
+                                    type="text" 
+                                    v-model="catalogSearch" 
+                                    placeholder="Cari barang..." 
+                                    class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs w-40 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                                <button type="button" @click="openCustomItemModal" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-xs font-bold transition flex items-center space-x-1">
+                                    <i class="fa-solid fa-plus"></i>
+                                    <span>+ Barang Lainnya</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Grid Tampilan Semua Barang Katalog -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div 
+                                v-for="item in filteredCatalog" 
+                                :key="item.id"
+                                :class="getItemCartQty(item.id) > 0 ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
+                                class="p-4 rounded-xl border transition flex flex-col justify-between relative group">
+                                
+                                <div>
+                                    <div class="flex justify-between items-start mb-1">
+                                        <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                            {{ item.unit }}
+                                        </span>
+                                        <span v-if="getItemCartQty(item.id) > 0" class="bg-emerald-600 text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                                            <i class="fa-solid fa-check text-[9px]"></i>
+                                            Dipilih {{ getItemCartQty(item.id) }}
+                                        </span>
+                                    </div>
+                                    <h4 class="font-bold text-slate-900 text-sm mb-1 line-clamp-2">{{ item.name }}</h4>
+                                    <p class="text-xs font-semibold text-emerald-700">{{ formatRupiah(item.price) }} / {{ item.unit }}</p>
+                                </div>
+
+                                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                                    <div v-if="getItemCartQty(item.id) > 0" class="flex items-center space-x-1.5 w-full">
+                                        <button 
+                                            type="button" 
+                                            @click="decrementCartItem(item)" 
+                                            class="w-8 h-8 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-bold flex items-center justify-center transition shadow-sm">
+                                            -
+                                        </button>
+                                        <input 
+                                            type="number" 
+                                            min="1" 
+                                            :value="getItemCartQty(item.id)" 
+                                            @input="updateCartQtyDirect(item, $event.target.value)"
+                                            @blur="ensureValidQty(item)"
+                                            class="w-full text-center text-sm font-bold bg-white border border-slate-300 rounded-lg py-1 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                        <button 
+                                            type="button" 
+                                            @click="incrementCartItem(item)" 
+                                            class="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center transition shadow-sm">
+                                            +
+                                        </button>
+                                    </div>
+                                    <button 
+                                        v-else 
+                                        type="button" 
+                                        @click="addToCart(item)"
+                                        class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm active:scale-95">
+                                        <i class="fa-solid fa-cart-plus"></i>
+                                        <span>Tambah Ke Pesanan</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 3. RINGKASAN BARANG DIPILIH (KERANJANG PESANAN) & TOTAL -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="border-b border-slate-100 pb-3 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-900 text-base flex items-center space-x-2">
+                                <i class="fa-solid fa-receipt text-emerald-600"></i>
+                                <span>3. Daftar Barang Dipesan & Rincian Total</span>
+                            </h3>
+                            <button v-if="selectedCartItems.length > 0" type="button" @click="clearCart" class="text-xs text-red-600 hover:text-red-800 font-semibold flex items-center gap-1">
+                                <i class="fa-solid fa-trash-can"></i> Kosongkan Keranjang
+                            </button>
+                        </div>
+
+                        <!-- Cart Empty Alert -->
+                        <div v-if="selectedCartItems.length === 0" class="py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                            <i class="fa-solid fa-cart-arrow-down text-3xl mb-2 text-slate-300"></i>
+                            <p class="text-sm">Belum ada barang yang dipilih. Silakan pilih barang dari daftar di atas.</p>
+                        </div>
+
+                        <!-- Selected Items Table -->
+                        <div v-else class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
+                                        <th class="py-2.5 px-3">Nama Barang</th>
+                                        <th class="py-2.5 px-3 text-center">Banyaknya</th>
+                                        <th class="py-2.5 px-3">Satuan</th>
+                                        <th class="py-2.5 px-3 text-right">Harga Satuan</th>
+                                        <th class="py-2.5 px-3 text-right">Subtotal</th>
+                                        <th class="py-2.5 px-3 text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-sm">
+                                    <tr v-for="cItem in selectedCartItems" :key="cItem.id">
+                                        <td class="py-3 px-3 font-semibold text-slate-900">
+                                            {{ cItem.name }}
+                                            <span v-if="cItem.isCustom" class="ml-1 bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-bold">Custom</span>
+                                        </td>
+                                        <td class="py-3 px-3 text-center">
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                step="any" 
+                                                v-model.number="cItem.quantity" 
+                                                @blur="ensureValidQty(cItem)"
+                                                class="w-16 text-center bg-slate-50 border border-slate-200 rounded py-1 text-xs font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            />
+                                        </td>
+                                        <td class="py-3 px-3 text-slate-600 text-xs">
+                                            <input 
+                                                v-if="cItem.isCustom" 
+                                                type="text" 
+                                                v-model="cItem.unit" 
+                                                class="w-20 bg-amber-50 border border-amber-200 rounded py-1 px-1.5 text-xs font-bold"
+                                            />
+                                            <span v-else class="bg-slate-100 px-2 py-0.5 rounded font-semibold">{{ cItem.unit }}</span>
+                                        </td>
+                                        <td class="py-3 px-3 text-right font-mono text-xs">
+                                            <input 
+                                                v-if="cItem.isCustom || isAdminLoggedIn" 
+                                                type="number" 
+                                                min="0" 
+                                                v-model.number="cItem.price" 
+                                                class="w-24 text-right bg-slate-50 border border-slate-200 rounded py-1 px-1 text-xs font-bold"
+                                            />
+                                            <span v-else>{{ formatRupiah(cItem.price) }}</span>
+                                        </td>
+                                        <td class="py-3 px-3 text-right font-bold text-emerald-700 font-mono">
+                                            {{ formatRupiah(cItem.quantity * cItem.price) }}
+                                        </td>
+                                        <td class="py-3 px-3 text-center">
+                                            <button type="button" @click="removeFromCart(cItem.id)" class="text-red-500 hover:text-red-700 p-1">
+                                                <i class="fa-solid fa-trash-can"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Catatan & Grand Total Submit Box -->
+                        <div class="pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Catatan Pemesanan (Opsional)</label>
+                                <textarea 
+                                    v-model="orderForm.catatan" 
+                                    rows="2" 
+                                    placeholder="Contoh: Kirim ke Ruang Guru / Digunakan Hari Jumat..." 
+                                    class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                ></textarea>
+                            </div>
+
+                            <div class="bg-slate-900 text-white p-4 rounded-xl shadow-lg flex flex-col justify-between space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Harus Dibayar:</span>
+                                    <span class="text-2xl font-extrabold text-emerald-400">{{ formatRupiah(grandOrderTotal) }}</span>
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    :disabled="isSubmitting || selectedCartItems.length === 0"
+                                    class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-extrabold text-sm rounded-lg shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-50">
+                                    <i v-if="isSubmitting" class="fa-solid fa-spinner animate-spin"></i>
+                                    <i v-else class="fa-solid fa-paper-plane"></i>
+                                    <span>{{ isSubmitting ? 'Mengirim Data...' : 'Kirim Pesanan Ke Spreadsheet' }}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+
+            <!-- ================= TAB 2: PANEL ADMIN (RESTRICTED ACCESS) ================= -->
+            <div v-show="activeTab === 'admin'" class="space-y-6">
+                
+                <!-- LOCK SCREEN IF NOT LOGGED IN AS ADMIN -->
+                <div v-if="!isAdminLoggedIn" class="bg-white p-8 sm:p-12 rounded-2xl border border-slate-200 text-center max-w-md mx-auto shadow-sm my-8">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                        <i class="fa-solid fa-user-lock"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-1">Akses Khusus Admin</h3>
+                    <p class="text-slate-500 text-xs mb-6">Pemesan umum tidak diizinkan masuk ke area admin. Masukkan PIN Admin untuk mengedit data & status pesanan.</p>
+                    
+                    <form @submit.prevent="loginAdmin" class="space-y-4">
+                        <input 
+                            type="password" 
+                            v-model="adminPinInput" 
+                            placeholder="PIN Admin (Default: 1234)" 
+                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-center text-xl font-bold tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <button type="submit" class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition shadow-md">
+                            Buka Panel Admin
+                        </button>
+                    </form>
+                </div>
+
+                <!-- ADMIN DASHBOARD PANEL CONTENT -->
+                <div v-else class="space-y-6">
+                    
+                    <!-- Admin Navigation Sub-Tabs -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-3">
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-emerald-700 text-white text-xs px-2.5 py-1 rounded-md font-bold uppercase">Administrator</span>
+                            <h2 class="font-bold text-slate-900 text-lg">Kelola Sistem & Kelola Pesanan</h2>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button 
+                                @click="adminSubTab = 'orders'"
+                                :class="adminSubTab === 'orders' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                                class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                                <i class="fa-solid fa-list-check"></i>
+                                <span>Kelola Pesanan ({{ orders.length }})</span>
+                            </button>
+                            <button 
+                                @click="adminSubTab = 'staff'"
+                                :class="adminSubTab === 'staff' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                                class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                                <i class="fa-solid fa-file-excel text-emerald-500"></i>
+                                <span>Upload Excel Guru/Pegawai</span>
+                            </button>
+                            <button 
+                                @click="adminSubTab = 'catalog'"
+                                :class="adminSubTab === 'catalog' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                                class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                                <span>Edit Katalog Barang</span>
+                            </button>
+                            <button 
+                                @click="adminSubTab = 'sheets'"
+                                :class="adminSubTab === 'sheets' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                                class="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                                <i class="fa-solid fa-gear"></i>
+                                <span>Integrasi Google Sheets</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SUB-TAB 1: DATA LOG PESANAN & UBAH STATUS (Tunggu, Dikemas, Dikirim) -->
+                    <div v-show="adminSubTab === 'orders'" class="space-y-4">
+                        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
+                            <div class="flex items-center space-x-3 w-full sm:w-auto">
+                                <input 
+                                    type="text" 
+                                    v-model="orderSearch" 
+                                    placeholder="Cari pemesan/barang..." 
+                                    class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                                <span class="text-xs font-semibold text-slate-500 whitespace-nowrap">Total: {{ filteredOrders.length }} Data</span>
+                            </div>
+
+                            <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                                <button @click="exportToCSV" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-file-csv"></i>
+                                    <span>Unduh CSV</span>
+                                </button>
+                                <button @click="syncAllToSheets" :disabled="isSyncing" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 disabled:opacity-50">
+                                    <i class="fa-solid fa-arrows-rotate" :class="{'animate-spin': isSyncing}"></i>
+                                    <span>Sync Ke Sheets</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Table Orders -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-semibold border-b border-slate-200">
+                                            <th class="py-3.5 px-4">Waktu</th>
+                                            <th class="py-3.5 px-4">Nama Pemesan</th>
+                                            <th class="py-3.5 px-4">Rincian Barang Dipesan</th>
+                                            <th class="py-3.5 px-4 text-right">Total Bayar</th>
+                                            <th class="py-3.5 px-4 text-center">Status Pesanan (Edit Admin)</th>
+                                            <th class="py-3.5 px-4 text-center">Sync Sheet</th>
+                                            <th class="py-3.5 px-4 text-center">Aksi Admin</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 text-sm">
+                                        <tr v-if="filteredOrders.length === 0">
+                                            <td colspan="7" class="py-12 text-center text-slate-400 text-xs">
+                                                <i class="fa-solid fa-inbox text-3xl mb-2 block text-slate-300"></i>
+                                                Belum ada data pesanan yang tersimpan.
+                                            </td>
+                                        </tr>
+
+                                        <tr v-for="order in filteredOrders" :key="order.id" class="hover:bg-slate-50 transition">
+                                            <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">
+                                                {{ order.timestamp }}
+                                            </td>
+                                            <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                                                {{ order.namaPemesan }}
+                                            </td>
+                                            <td class="py-3 px-4 text-xs text-slate-700">
+                                                <ul class="list-disc list-inside space-y-0.5">
+                                                    <li v-for="(it, idx) in order.items" :key="idx" class="font-medium">
+                                                        {{ it.name }} &mdash; <span class="font-bold text-slate-900">{{ it.quantity }} {{ it.unit }}</span> 
+                                                        ({{ formatRupiah(it.price) }})
+                                                    </li>
+                                                </ul>
+                                                <span v-if="order.catatan" class="block text-[11px] text-amber-700 font-normal italic mt-1">
+                                                    Note: {{ order.catatan }}
+                                                </span>
+                                            </td>
+                                            <td class="py-3 px-4 text-right font-extrabold text-emerald-700 font-mono whitespace-nowrap">
+                                                {{ formatRupiah(order.totalHarga) }}
+                                            </td>
+                                            <td class="py-3 px-4 text-center">
+                                                <!-- Dropdown Akses Edit Status Admin: Tunggu, Dikemas, Dikirim -->
+                                                <select 
+                                                    v-model="order.status" 
+                                                    @change="updateOrderStatus(order)"
+                                                    :class="{
+                                                        'bg-amber-100 text-amber-900 border-amber-300': order.status === 'Tunggu',
+                                                        'bg-blue-100 text-blue-900 border-blue-300': order.status === 'Dikemas',
+                                                        'bg-emerald-100 text-emerald-900 border-emerald-300': order.status === 'Dikirim'
+                                                    }"
+                                                    class="px-2.5 py-1 rounded-lg text-xs font-bold border outline-none cursor-pointer">
+                                                    <option value="Tunggu">⏳ Tunggu</option>
+                                                    <option value="Dikemas">📦 Dikemas</option>
+                                                    <option value="Dikirim">🚀 Dikirim</option>
+                                                </select>
+                                            </td>
+                                            <td class="py-3 px-4 text-center">
+                                                <span 
+                                                    :class="order.synced ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'"
+                                                    class="px-2 py-0.5 rounded-md text-[10px] font-bold border">
+                                                    {{ order.synced ? 'Tersimpan' : 'Pending' }}
+                                                </span>
+                                            </td>
+                                            <td class="py-3 px-4 text-center whitespace-nowrap">
+                                                <div class="flex items-center justify-center space-x-1">
+                                                    <button @click="openEditOrderModal(order)" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition" title="Edit Pesanan">
+                                                        <i class="fa-solid fa-pen-to-square"></i>
+                                                    </button>
+                                                    <button @click="deleteOrder(order.id)" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition" title="Hapus Data">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUB-TAB 2: UPLOAD EXCEL NAMA GURU & PEGAWAI MTsN 1 KOTA MALANG -->
+                    <div v-show="adminSubTab === 'staff'" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                        <div class="border-b border-slate-100 pb-4 flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-lg flex items-center gap-2">
+                                    <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                                    <span>Upload & Kelola Daftar Nama Guru / Pegawai</span>
+                                </h3>
+                                <p class="text-xs text-slate-500">Upload file Excel (.xlsx / .csv) untuk memperbarui daftar dropdown nama pemesan.</p>
+                            </div>
+                            <span class="bg-emerald-50 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold">
+                                {{ staffList.length }} Nama Terdaftar
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Excel File Uploader -->
+                            <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 text-center space-y-3">
+                                <i class="fa-solid fa-cloud-arrow-up text-4xl text-emerald-600"></i>
+                                <div>
+                                    <h4 class="font-bold text-slate-900 text-sm">Upload File Excel Nama Guru/Pegawai</h4>
+                                    <p class="text-xs text-slate-500">Pilih file .xlsx, .xls, atau .csv (Kolom pertama berisi nama)</p>
+                                </div>
+                                <input 
+                                    type="file" 
+                                    ref="excelFileInput" 
+                                    accept=".xlsx, .xls, .csv" 
+                                    @change="handleStaffExcelUpload" 
+                                    class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer"
+                                />
+                            </div>
+
+                            <!-- Manual Add Staff Form -->
+                            <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-3">
+                                <h4 class="font-bold text-slate-900 text-sm">Tambah Nama Guru / Pegawai Manual</h4>
+                                <form @submit.prevent="addSingleStaff" class="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        v-model="newStaffNameInput" 
+                                        placeholder="Ketik nama & gelar baru..." 
+                                        class="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    />
+                                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold whitespace-nowrap">
+                                        Tambah
+                                    </button>
+                                </form>
+                                <button @click="resetStaffToDefault" class="text-xs text-slate-500 hover:text-red-600 underline">
+                                    Reset Ke Daftar Bawaan MTsN 1 Malang
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Current Staff List Table -->
+                        <div class="border border-slate-200 rounded-xl overflow-hidden">
+                            <div class="bg-slate-100 p-3 text-xs font-bold text-slate-700 flex justify-between">
+                                <span>Daftar Nama Saat Ini</span>
+                                <span>Total: {{ staffList.length }} Orang</span>
+                            </div>
+                            <div class="max-h-60 overflow-y-auto divide-y divide-slate-100 custom-scrollbar p-2 bg-white">
+                                <div v-for="(name, index) in staffList" :key="index" class="py-1.5 px-3 text-xs flex justify-between items-center hover:bg-slate-50">
+                                    <span class="font-medium text-slate-800">{{ index + 1 }}. {{ name }}</span>
+                                    <button @click="removeStaffName(index)" class="text-red-500 hover:text-red-700 p-1"><i class="fa-solid fa-xmark"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUB-TAB 3: EDIT KATALOG BARANG -->
+                    <div v-show="adminSubTab === 'catalog'" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-lg">Kelola Katalog Barang Resmi</h3>
+                                <p class="text-xs text-slate-500">Edit nama barang, harga satuan, dan satuan default yang tampil pada formulir pemesan.</p>
+                            </div>
+                            <button @click="openAddCatalogModal" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Tambah Barang Katalog</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            <div v-for="cItem in catalog" :key="cItem.id" class="p-4 border border-slate-200 rounded-xl space-y-2 bg-slate-50 relative">
+                                <div class="flex justify-between items-start">
+                                    <span class="text-[10px] bg-slate-200 px-2 py-0.5 rounded font-bold text-slate-700">{{ cItem.unit }}</span>
+                                    <div class="flex space-x-1">
+                                        <button @click="editCatalogItem(cItem)" class="text-amber-600 hover:text-amber-800 p-1"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button @click="deleteCatalogItem(cItem.id)" class="text-red-600 hover:text-red-800 p-1"><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </div>
+                                <h4 class="font-bold text-slate-900 text-sm">{{ cItem.name }}</h4>
+                                <p class="text-xs text-emerald-700 font-extrabold">{{ formatRupiah(cItem.price) }} / {{ cItem.unit }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUB-TAB 4: INTEGRASI SHEETS CODE -->
+                    <div v-show="adminSubTab === 'sheets'" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-slate-900 text-lg">Konfigurasi Webhook Google Apps Script</h3>
+                            <button @click="copyScriptCode" class="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center space-x-1">
+                                <i class="fa-solid fa-copy"></i>
+                                <span>Salin Kode Script</span>
+                            </button>
+                        </div>
+
+                        <div class="bg-slate-50 p-4 rounded-xl space-y-3">
+                            <label class="block text-xs font-bold text-slate-800 uppercase tracking-wider">URL Google Apps Script Web App</label>
+                            <div class="flex gap-2">
+                                <input 
+                                    type="url" 
+                                    v-model="scriptUrl" 
+                                    placeholder="https://script.google.com/macros/s/.../exec" 
+                                    class="flex-grow px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                                <button @click="saveScriptUrl" class="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg whitespace-nowrap">
+                                    Simpan Webhook
+                                </button>
+                                <button @click="testScriptUrl" :disabled="!scriptUrl || isTesting" class="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg whitespace-nowrap disabled:opacity-50">
+                                    Tes Kirim
+                                </button>
+                            </div>
+                        </div>
+
+                        <pre class="bg-slate-900 text-emerald-400 p-4 rounded-xl text-xs font-mono overflow-x-auto h-64 border border-slate-800 leading-relaxed custom-scrollbar"><code>{{ appsScriptCode }}</code></pre>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+        <!-- MODAL: TAMBAH ITEM CUSTOM OLEH PEMESAN -->
+        <div v-if="showCustomItemModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <h3 class="font-bold text-slate-900 text-base flex items-center gap-1.5">
+                        <i class="fa-solid fa-box-open text-amber-500"></i>
+                        <span>Input Barang Custom / Lainnya</span>
+                    </h3>
+                    <button @click="showCustomItemModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <form @submit.prevent="addCustomItemToCart" class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Nama Barang Manual <span class="text-red-500">*</span></label>
+                        <input type="text" v-model="customItemForm.name" required placeholder="Misal: Spanduk Banner 3x1m" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs" />
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Banyaknya (Qty) <span class="text-red-500">*</span></label>
+                            <input type="number" step="any" min="1" v-model.number="customItemForm.quantity" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs" />
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Satuan <span class="text-red-500">*</span></label>
+                            <input type="text" v-model="customItemForm.unit" required placeholder="Pcs, Lembar, Sak, dll" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Perkiraan Harga Satuan (Rp) <span class="text-red-500">*</span></label>
+                        <input type="number" min="0" v-model.number="customItemForm.price" required placeholder="0" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs font-bold" />
+                    </div>
+
+                    <div class="pt-2 flex justify-end gap-2">
+                        <button type="button" @click="showCustomItemModal = false" class="px-4 py-2 border rounded-lg text-slate-600">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg">Tambahkan Ke Pesanan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: KATALOG ADMIN (ADD/EDIT) -->
+        <div v-if="showCatalogModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <h3 class="font-bold text-slate-900 text-base">
+                        {{ isEditingCatalog ? 'Edit Barang Katalog' : 'Tambah Barang Baru' }}
+                    </h3>
+                    <button @click="showCatalogModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <form @submit.prevent="saveCatalogItem" class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Nama Barang</label>
+                        <input type="text" v-model="catalogForm.name" required placeholder="Kertas HVS A4 80gr" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Harga Satuan (Rp)</label>
+                            <input type="number" min="0" v-model.number="catalogForm.price" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold" />
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Satuan</label>
+                            <input type="text" v-model="catalogForm.unit" required placeholder="Box" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" />
+                        </div>
+                    </div>
+                    <div class="pt-2 flex justify-end gap-2">
+                        <button type="button" @click="showCatalogModal = false" class="px-4 py-2 border rounded-lg text-slate-600">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg">Simpan Katalog</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
+            <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
+                MTsN 1 Kota Malang Order Sheet &copy; {{ new Date().getFullYear() }} - Linked Spreadsheet ID: 10IPPuKz7u1l8jX9O2Z2Hhaz3gBlRPNKbdOk52vhbafs
+            </div>
+        </footer>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    activeTab: 'order',
+                    adminSubTab: 'orders',
+                    isAdminLoggedIn: false,
+                    adminPinInput: '',
+                    catalogSearch: '',
+                    orderSearch: '',
+                    isSubmitting: false,
+                    isSyncing: false,
+                    isTesting: false,
+
+                    scriptUrl: localStorage.getItem('mtsn1_script_url') || '',
+
+                    // Default MTsN 1 Kota Malang Staff List
+                    staffList: JSON.parse(localStorage.getItem('mtsn1_staff_list') || '[]'),
+                    defaultStaff: [
+                        'Dra. Hj. Erni Qomariyah, M.Pd',
+                        'Drs. Samsudin, M.Pd',
+                        'Mochammad Fathoni, S.Pd',
+                        'Siti Maimunah, S.Ag',
+                        'Nurul Hidayah, S.Pd',
+                        'Bambang Sugianto, S.T',
+                        'H. Ahmad Rifai, S.Pd',
+                        'Lilik Rahmawati, M.Pd',
+                        'Agus Kurniawan, S.Kom'
+                    ],
+                    newStaffNameInput: '',
+
+                    // Default Catalog Items
+                    catalog: JSON.parse(localStorage.getItem('mtsn1_catalog') || '[]'),
+                    defaultCatalog: [
+                        { id: 1, name: 'Kertas HVS A4 80gr', price: 55000, unit: 'Box' },
+                        { id: 2, name: 'Tinta Printer Hitam Original', price: 125000, unit: 'Botol' },
+                        { id: 3, name: 'Pulpen Gel Hitam 0.5mm', price: 35000, unit: 'Pack' },
+                        { id: 4, name: 'Kopi Arabika Premium 500g', price: 85000, unit: 'Pack' },
+                        { id: 5, name: 'Air Mineral Botol 600ml', price: 48000, unit: 'Karton' },
+                        { id: 6, name: 'Kabel USB Type-C Fast Charge', price: 45000, unit: 'Pcs' },
+                    ],
+
+                    // Order Form State
+                    orderForm: {
+                        selectedNama: '',
+                        customNama: '',
+                        catatan: ''
+                    },
+
+                    // Multi-Item Selected Cart
+                    selectedCartItems: [],
+
+                    // Submitted Orders Log
+                    orders: JSON.parse(localStorage.getItem('mtsn1_saved_orders') || '[]'),
+
+                    // Modals
+                    showCustomItemModal: false,
+                    customItemForm: { name: '', quantity: 1, unit: 'Pcs', price: 0 },
+
+                    showCatalogModal: false,
+                    isEditingCatalog: false,
+                    catalogForm: { id: null, name: '', price: 0, unit: 'Pcs' },
+
+                    toast: { show: false, message: '', type: 'success' },
+
+                    // Google Apps Script code snippet
+                    appsScriptCode: `// KODE GOOGLE APPS SCRIPT (VERSI MULTI-ITEM & STATUS)
+function doPost(e) { return handleRequest(e); }
+function doGet(e) { return handleRequest(e); }
+
+function handleRequest(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = {};
+
+    if (e && e.postData && e.postData.contents) {
+      try { data = JSON.parse(e.postData.contents); } catch (err) { data = e.parameter; }
+    } else if (e && e.parameter) {
+      data = e.parameter;
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Waktu/Timestamp", 
+        "Nama Pemesan", 
+        "Barang Dipesan", 
+        "Total Bayar", 
+        "Status", 
+        "Catatan"
+      ]);
+    }
+
+    sheet.appendRow([
+      data.timestamp || new Date().toLocaleString("id-ID"),
+      data.namaPemesan || "-",
+      data.barangText || "-",
+      Number(data.totalHarga) || 0,
+      data.status || "Tunggu",
+      data.catatan || ""
+    ]);
+
+    return ContentService.createTextOutput(JSON.stringify({ "result": "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ "result": "error", "message": err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}`
+                };
+            },
+
+            computed: {
+                cartItemsCount() {
+                    return this.selectedCartItems.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+                },
+
+                grandOrderTotal() {
+                    return this.selectedCartItems.reduce((sum, item) => {
+                        return sum + ((Number(item.quantity) || 0) * (Number(item.price) || 0));
+                    }, 0);
+                },
+
+                filteredCatalog() {
+                    if (!this.catalogSearch) return this.catalog;
+                    const q = this.catalogSearch.toLowerCase();
+                    return this.catalog.filter(c => c.name.toLowerCase().includes(q));
+                },
+
+                filteredOrders() {
+                    if (!this.orderSearch) return this.orders;
+                    const q = this.orderSearch.toLowerCase();
+                    return this.orders.filter(o => 
+                        o.namaPemesan.toLowerCase().includes(q) || 
+                        JSON.stringify(o.items).toLowerCase().includes(q)
+                    );
+                }
+            },
+
+            mounted() {
+                if (this.staffList.length === 0) {
+                    this.staffList = [...this.defaultStaff];
+                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                }
+                if (this.catalog.length === 0) {
+                    this.catalog = [...this.defaultCatalog];
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                }
+            },
+
+            methods: {
+                formatRupiah(val) {
+                    return new Intl.NumberFormat('id-ID', {
+                        style: 'currency',
+                        currency: 'IDR',
+                        maximumFractionDigits: 0
+                    }).format(val || 0);
+                },
+
+                // Cart Operations (Multi-Item Selection with robust string ID matching)
+                getItemCartQty(itemId) {
+                    if (itemId === null || itemId === undefined) return 0;
+                    const found = this.selectedCartItems.find(i => String(i.id) === String(itemId));
+                    return found ? Number(found.quantity) || 0 : 0;
+                },
+
+                addToCart(item) {
+                    if (!item) return;
+                    const found = this.selectedCartItems.find(i => String(i.id) === String(item.id));
+                    if (found) {
+                        found.quantity = (Number(found.quantity) || 0) + 1;
+                    } else {
+                        this.selectedCartItems.push({
+                            id: item.id,
+                            name: item.name,
+                            price: Number(item.price) || 0,
+                            unit: item.unit || 'Pcs',
+                            quantity: 1,
+                            isCustom: false
+                        });
+                    }
+                },
+
+                incrementCartItem(item) {
+                    this.addToCart(item);
+                },
+
+                decrementCartItem(item) {
+                    const found = this.selectedCartItems.find(i => String(i.id) === String(item.id));
+                    if (found) {
+                        if (found.quantity > 1) {
+                            found.quantity -= 1;
+                        } else {
+                            this.removeFromCart(item.id);
+                        }
+                    }
+                },
+
+                updateCartQtyDirect(item, val) {
+                    if (val === '' || val === null || val === undefined) return;
+                    const qty = Number(val);
+                    if (isNaN(qty)) return;
+
+                    const found = this.selectedCartItems.find(i => String(i.id) === String(item.id));
+                    if (found) {
+                        if (qty <= 0) {
+                            this.removeFromCart(item.id);
+                        } else {
+                            found.quantity = qty;
+                        }
+                    }
+                },
+
+                ensureValidQty(item) {
+                    if (!item) return;
+                    if (!item.quantity || item.quantity < 1) {
+                        item.quantity = 1;
+                    }
+                },
+
+                removeFromCart(itemId) {
+                    this.selectedCartItems = this.selectedCartItems.filter(i => String(i.id) !== String(itemId));
+                },
+
+                clearCart() {
+                    this.selectedCartItems = [];
+                },
+
+                // Custom Item Handler
+                openCustomItemModal() {
+                    this.customItemForm = { name: '', quantity: 1, unit: 'Pcs', price: 0 };
+                    this.showCustomItemModal = true;
+                },
+
+                addCustomItemToCart() {
+                    if (!this.customItemForm.name || this.customItemForm.quantity <= 0) {
+                        this.showToast('Lengkapi nama dan jumlah barang custom!', 'error');
+                        return;
+                    }
+                    this.selectedCartItems.push({
+                        id: 'custom_' + Date.now(),
+                        name: this.customItemForm.name,
+                        price: this.customItemForm.price,
+                        unit: this.customItemForm.unit,
+                        quantity: this.customItemForm.quantity,
+                        isCustom: true
+                    });
+                    this.showCustomItemModal = false;
+                    this.showToast('Barang custom ditambahkan ke pesanan!', 'success');
+                },
+
+                // Submit Form
+                async submitOrder() {
+                    const finalNama = this.orderForm.selectedNama === 'CUSTOM' ? this.orderForm.customNama : this.orderForm.selectedNama;
+                    
+                    if (!finalNama) {
+                        this.showToast('Mohon pilih atau masukkan nama pemesan!', 'error');
+                        return;
+                    }
+
+                    if (this.selectedCartItems.length === 0) {
+                        this.showToast('Pilih minimal 1 barang yang ingin dipesan!', 'error');
+                        return;
+                    }
+
+                    this.isSubmitting = true;
+
+                    // Compile human readable text of items for Google Sheets
+                    const barangText = this.selectedCartItems.map(i => `${i.name} (${i.quantity} ${i.unit})`).join(', ');
+
+                    const newOrder = {
+                        id: Date.now(),
+                        timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+                        namaPemesan: finalNama,
+                        items: [...this.selectedCartItems],
+                        barangText: barangText,
+                        totalHarga: this.grandOrderTotal,
+                        status: 'Tunggu', // Default status: Tunggu
+                        catatan: this.orderForm.catatan,
+                        synced: false
+                    };
+
+                    if (this.scriptUrl) {
+                        const ok = await this.sendToSheets(newOrder);
+                        if (ok) newOrder.synced = true;
+                    }
+
+                    this.orders.unshift(newOrder);
+                    this.saveOrders();
+
+                    this.isSubmitting = false;
+
+                    if (newOrder.synced) {
+                        this.showToast('Pesanan berhasil dikirim & langsung tercatat di Spreadsheet!', 'success');
+                    } else {
+                        this.showToast('Pesanan tersimpan lokal dengan status "Tunggu".', 'success');
+                    }
+
+                    // Reset form & cart
+                    this.orderForm.selectedNama = '';
+                    this.orderForm.customNama = '';
+                    this.orderForm.catatan = '';
+                    this.clearCart();
+                },
+
+                async sendToSheets(orderPayload) {
+                    if (!this.scriptUrl) return false;
+                    try {
+                        await fetch(this.scriptUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify(orderPayload)
+                        });
+                        return true;
+                    } catch (e) {
+                        console.error('Sheets Error:', e);
+                        return false;
+                    }
+                },
+
+                // Admin Controls
+                goToAdminTab() {
+                    this.activeTab = 'admin';
+                },
+
+                openAdminAuthModal() {
+                    this.activeTab = 'admin';
+                },
+
+                loginAdmin() {
+                    if (this.adminPinInput === '1234') {
+                        this.isAdminLoggedIn = true;
+                        this.adminPinInput = '';
+                        this.showToast('Berhasil login sebagai Administrator!', 'success');
+                    } else {
+                        this.showToast('PIN Admin Salah! (Default PIN: 1234)', 'error');
+                    }
+                },
+
+                logoutAdmin() {
+                    this.isAdminLoggedIn = false;
+                    this.activeTab = 'order';
+                    this.showToast('Anda telah keluar dari Mode Admin.', 'success');
+                },
+
+                updateOrderStatus(order) {
+                    this.saveOrders();
+                    this.showToast(`Status pesanan ${order.namaPemesan} diubah ke: ${order.status}`, 'success');
+                },
+
+                deleteOrder(id) {
+                    this.orders = this.orders.filter(o => o.id !== id);
+                    this.saveOrders();
+                    this.showToast('Pesanan dihapus', 'error');
+                },
+
+                saveOrders() {
+                    localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
+                },
+
+                // Excel Upload for Staff List
+                handleStaffExcelUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                            // Extract names from column 1
+                            const extracted = [];
+                            json.forEach(row => {
+                                if (row && row[0] && typeof row[0] === 'string' && row[0].trim()) {
+                                    const val = row[0].trim();
+                                    if (val.toLowerCase() !== 'nama' && val.toLowerCase() !== 'nama guru') {
+                                        extracted.push(val);
+                                    }
+                                }
+                            });
+
+                            if (extracted.length > 0) {
+                                this.staffList = extracted;
+                                localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                                this.showToast(`Berhasil mengimpor ${extracted.length} nama dari file Excel!`, 'success');
+                            } else {
+                                this.showToast('Tidak ditemukan data nama pada file Excel.', 'error');
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            this.showToast('Gagal membaca file Excel.', 'error');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                },
+
+                addSingleStaff() {
+                    if (this.newStaffNameInput.trim()) {
+                        this.staffList.push(this.newStaffNameInput.trim());
+                        localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                        this.newStaffNameInput = '';
+                        this.showToast('Nama guru/pegawai ditambahkan!', 'success');
+                    }
+                },
+
+                removeStaffName(index) {
+                    this.staffList.splice(index, 1);
+                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                },
+
+                resetStaffToDefault() {
+                    this.staffList = [...this.defaultStaff];
+                    localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
+                    this.showToast('Daftar nama dikembalikan ke bawaan MTsN 1 Malang.', 'success');
+                },
+
+                // Catalog Admin
+                openAddCatalogModal() {
+                    this.isEditingCatalog = false;
+                    this.catalogForm = { id: Date.now(), name: '', price: 0, unit: 'Pcs' };
+                    this.showCatalogModal = true;
+                },
+
+                editCatalogItem(item) {
+                    this.isEditingCatalog = true;
+                    this.catalogForm = { ...item };
+                    this.showCatalogModal = true;
+                },
+
+                saveCatalogItem() {
+                    if (this.isEditingCatalog) {
+                        const idx = this.catalog.findIndex(c => c.id === this.catalogForm.id);
+                        if (idx !== -1) this.catalog[idx] = { ...this.catalogForm };
+                    } else {
+                        this.catalog.push({ ...this.catalogForm });
+                    }
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                    this.showCatalogModal = false;
+                    this.showToast('Katalog diperbarui!', 'success');
+                },
+
+                deleteCatalogItem(id) {
+                    this.catalog = this.catalog.filter(c => c.id !== id);
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
+                },
+
+                // Spreadsheet Webhook Settings
+                saveScriptUrl() {
+                    localStorage.setItem('mtsn1_script_url', this.scriptUrl);
+                    this.showToast('URL Google Apps Script disimpan!', 'success');
+                },
+
+                async testScriptUrl() {
+                    if (!this.scriptUrl) return;
+                    this.isTesting = true;
+                    const testPayload = {
+                        timestamp: new Date().toLocaleString('id-ID'),
+                        namaPemesan: "TES KONEKSI ADMIN",
+                        barangText: "Barang Uji Coba (1 Pcs)",
+                        totalHarga: 10000,
+                        status: "Tunggu",
+                        catatan: "Pengujian webhook dari Panel Admin"
+                    };
+                    const ok = await this.sendToSheets(testPayload);
+                    this.isTesting = false;
+                    if (ok) this.showToast('Sinyal tes berhasil dikirim!', 'success');
+                },
+
+                async syncAllToSheets() {
+                    if (!this.scriptUrl) {
+                        this.showToast('Atur URL Apps Script terlebih dahulu!', 'error');
+                        return;
+                    }
+                    this.isSyncing = true;
+                    for (let o of this.orders) {
+                        const ok = await this.sendToSheets(o);
+                        if (ok) o.synced = true;
+                    }
+                    this.saveOrders();
+                    this.isSyncing = false;
+                    this.showToast('Semua data disinkronkan ke Spreadsheet!', 'success');
+                },
+
+                exportToCSV() {
+                    if (this.orders.length === 0) return;
+                    let csv = "data:text/csv;charset=utf-8,Timestamp,Nama Pemesan,Barang Dipesan,Total Bayar,Status,Catatan\n";
+                    this.orders.forEach(o => {
+                        csv += `"${o.timestamp}","${o.namaPemesan}","${o.barangText}",${o.totalHarga},"${o.status}","${o.catatan || ''}"\n`;
+                    });
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodeURI(csv));
+                    link.setAttribute("download", `pesanan_mtsn1malang_${new Date().toISOString().slice(0,10)}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+
+                copyScriptCode() {
+                    const el = document.createElement('textarea');
+                    el.value = this.appsScriptCode;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    this.showToast('Kode disalin!', 'success');
+                },
+
+                showToast(msg, type = 'success') {
+                    this.toast.message = msg;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    setTimeout(() => { this.toast.show = false; }, 4000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
