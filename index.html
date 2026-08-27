@@ -3,18 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Pemesanan MTsN 1 Kota Malang & Sync Spreadsheet</title>
+    <title>Aplikasi Pemesanan & Kasir - MTsN 1 Kota Malang</title>
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Vue.js 3 CDN -->
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Vue 3 Global CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- SheetJS for Excel Uploading (.xlsx / .xls / .csv) -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- SheetJS (XLSX) CDN for Excel Upload -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
+
     <script>
         tailwind.config = {
             theme: {
@@ -42,8 +47,9 @@
             }
         }
     </script>
+
     <style>
-        [v-cloak] { display: none; }
+        [v-cloak] { display: none !important; }
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -64,7 +70,6 @@
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
     <div id="app" v-cloak class="flex-grow flex flex-col">
         
-        <!-- Header & Navbar -->
         <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="flex justify-between h-16 items-center">
@@ -171,7 +176,7 @@
                         <span class="text-[10px] text-emerald-300 uppercase tracking-wider font-bold block">Status Cloud Database</span>
                         <span class="text-xs font-mono text-emerald-100 flex items-center justify-end gap-1.5 mt-0.5">
                             <span class="w-2 h-2 rounded-full" :class="isCloudConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
-                            {{ isCloudConnected ? 'Realtime Sync HP & Laptop' : 'Connecting Cloud...' }}
+                            {{ isCloudConnected ? 'Realtime Sync Active' : 'Connecting Cloud...' }}
                         </span>
                     </div>
                 </div>
@@ -558,7 +563,6 @@
                                                 {{ formatRupiah(order.totalHarga) }}
                                             </td>
                                             <td class="py-3 px-4 text-center">
-                                                <!-- Dropdown Akses Edit Status Admin: Tunggu, Dikemas, Dikirim -->
                                                 <select 
                                                     v-model="order.status" 
                                                     @change="updateOrderStatus(order)"
@@ -582,9 +586,6 @@
                                             </td>
                                             <td class="py-3 px-4 text-center whitespace-nowrap">
                                                 <div class="flex items-center justify-center space-x-1">
-                                                    <button @click="openEditOrderModal(order)" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition" title="Edit Pesanan">
-                                                        <i class="fa-solid fa-pen-to-square"></i>
-                                                    </button>
                                                     <button @click="deleteOrder(order.id)" class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition" title="Hapus Data">
                                                         <i class="fa-solid fa-trash"></i>
                                                     </button>
@@ -812,7 +813,7 @@
         <!-- Footer -->
         <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
             <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
-                MTsN 1 Kota Malang Order Sheet &copy; {{ new Date().getFullYear() }} - Linked Spreadsheet ID: 10IPPuKz7u1l8jX9O2Z2Hhaz3gBlRPNKbdOk52vhbafs
+                MTsN 1 Kota Malang Order Sheet &copy; {{ new Date().getFullYear() }} - Sistem Kasir & Pemesanan Realtime
             </div>
         </footer>
 
@@ -823,11 +824,13 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Access global Vue object loaded from unpkg script
         const { createApp } = Vue;
 
-        // Firebase Environment & Setup
+        // Firebase Environment & Setup safely parsed
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'mtsn1-malang-koperasi';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        
+        let firebaseConfig = {
             apiKey: "demo-api-key",
             authDomain: "demo-app.firebaseapp.com",
             projectId: "demo-app",
@@ -836,9 +839,24 @@
             appId: "1:123456789:web:abcdef"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try {
+                firebaseConfig = typeof __firebase_config === 'string' 
+                    ? JSON.parse(__firebase_config) 
+                    : __firebase_config;
+            } catch (err) {
+                console.warn("Error parsing __firebase_config, fallback active:", err);
+            }
+        }
+
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.warn("Firebase init warning:", e);
+        }
 
         createApp({
             data() {
@@ -961,12 +979,13 @@
                     // Default Catalog Items
                     catalog: JSON.parse(localStorage.getItem('mtsn1_catalog') || '[]'),
                     defaultCatalog: [
-                        { id: 1, name: 'Minyak Goreng sunco 2 Lt', price: 44000, unit: 'pcs' },
-                        { id: 2, name: 'Minyak Goreng Tropical 2 Lt', price: 42000, unit: 'Botol' },
-                        { id: 3, name: 'Gula kba 1 kg', price: 18000, unit: 'Pack' },
-                        { id: 4, name: 'Beras Lahap lele 5 Kg', price: 81000, unit: 'Pcs' },
-                        { id: 5, name: 'Beras Cap Lombok', price: 81000, unit: 'Pcs' },
-                        
+                        { id: 1, name: 'Kertas HVS A4 80gr', price: 55000, unit: 'Box' },
+                        { id: 2, name: 'Tinta Printer Hitam Original', price: 125000, unit: 'Botol' },
+                        { id: 3, name: 'Pulpen Gel Hitam 0.5mm', price: 35000, unit: 'Pack' },
+                        { id: 4, name: 'Kopi Arabika Premium 500g', price: 85000, unit: 'Pack' },
+                        { id: 5, name: 'Air Mineral Botol 600ml', price: 48000, unit: 'Karton' },
+                        { id: 6, name: 'Kabel USB Type-C Fast Charge', price: 45000, unit: 'Pcs' },
+                    ],
 
                     // Order Form State
                     orderForm: {
@@ -1085,10 +1104,19 @@ function handleRequest(e) {
 
             methods: {
                 async initCloudSync() {
+                    if (!db || !auth) {
+                        console.warn("Cloud sync disabled (Offline mode).");
+                        return;
+                    }
                     try {
                         let userCred;
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                            try {
+                                userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                            } catch (tokenErr) {
+                                console.warn("Custom token auth failed, falling back to anonymous auth:", tokenErr);
+                                userCred = await signInAnonymously(auth);
+                            }
                         } else {
                             userCred = await signInAnonymously(auth);
                         }
@@ -1139,6 +1167,7 @@ function handleRequest(e) {
 
                     } catch (err) {
                         console.error("Cloud Sync Auth Failed:", err);
+                        this.isCloudConnected = false;
                     }
                 },
 
