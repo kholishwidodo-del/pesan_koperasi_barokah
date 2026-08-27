@@ -1164,10 +1164,8 @@ function handleRequest(e) {
                                 cloudOrders.push(docSnap.data());
                             });
                             cloudOrders.sort((a, b) => (b.id || 0) - (a.id || 0));
-                            if (cloudOrders.length > 0 || snapshot.metadata.fromCache === false) {
-                                this.orders = cloudOrders;
-                                localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
-                            }
+                            this.orders = cloudOrders;
+                            localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
                         }, (error) => console.error("Orders Cloud Error:", error));
 
                     } catch (err) {
@@ -1293,6 +1291,7 @@ function handleRequest(e) {
 
                 removeFromCart(itemId) {
                     this.selectedCartItems = this.selectedCartItems.filter(i => String(i.id) !== String(itemId));
+                    this.showToast('Barang dihapus dari keranjang pesanan', 'success');
                 },
 
                 clearCart() {
@@ -1422,8 +1421,10 @@ function handleRequest(e) {
                 },
 
                 async deleteOrder(id) {
+                    this.orders = this.orders.filter(o => String(o.id) !== String(id));
+                    localStorage.setItem('mtsn1_saved_orders', JSON.stringify(this.orders));
                     await this.deleteOrderFromCloud(id);
-                    this.showToast('Pesanan dihapus dari Cloud Database', 'error');
+                    this.showToast('Pesanan berhasil dihapus', 'success');
                 },
 
                 // Excel Upload for Staff List
@@ -1515,7 +1516,7 @@ function handleRequest(e) {
                 },
 
                 deleteCatalogItem(id) {
-                    this.catalog = this.catalog.filter(c => c.id !== id);
+                    this.catalog = this.catalog.filter(c => String(c.id) !== String(id));
                     localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
                     this.saveCatalogToCloud(this.catalog);
                     this.showToast('Barang berhasil dihapus dari katalog', 'success');
