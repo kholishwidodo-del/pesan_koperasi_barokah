@@ -979,12 +979,15 @@
                     // Default Catalog Items
                     catalog: JSON.parse(localStorage.getItem('mtsn1_catalog') || '[]'),
                     defaultCatalog: [
-                        { id: 1, name: 'Kertas HVS A4 80gr', price: 55000, unit: 'Box' },
-                        { id: 2, name: 'Tinta Printer Hitam Original', price: 125000, unit: 'Botol' },
-                        { id: 3, name: 'Pulpen Gel Hitam 0.5mm', price: 35000, unit: 'Pack' },
-                        { id: 4, name: 'Kopi Arabika Premium 500g', price: 85000, unit: 'Pack' },
-                        { id: 5, name: 'Air Mineral Botol 600ml', price: 48000, unit: 'Karton' },
-                        { id: 6, name: 'Kabel USB Type-C Fast Charge', price: 45000, unit: 'Pcs' },
+                        { id: 1, name: 'Beras Lombok Lele', price: 81000, unit: 'Sak' },
+                        { id: 2, name: 'Minyak Goreng Sunco 2 Lt', price: 44000, unit: 'Pouch' },
+                        { id: 3, name: 'Minyak Goreng Tropical Botol (2 Liter)', price: 43000, unit: 'Botol' },
+                        { id: 4, name: 'Gula Pasir Putih KBA (Bungkus Pink)', price: 18000, unit: 'Kg' },
+                        { id: 5, name: 'Garam Halus Merk Kapal', price: 2000, unit: 'Bungkus' },
+                        { id: 6, name: 'Sunlight Refill 610g (Isi 2)', price: 17900, unit: 'Paket' },
+                        { id: 7, name: 'SoKlin Deterjen 700g', price: 17000, unit: 'Bungkus' },
+                        { id: 8, name: 'Sabun Lifebuoy 800g', price: 28500, unit: 'Pouch' },
+                        { id: 9, name: 'Santan Rose Brand 65ml', price: 3000, unit: 'Pcs' }
                     ],
 
                     // Order Form State
@@ -1094,8 +1097,10 @@ function handleRequest(e) {
                     localStorage.setItem('mtsn1_staff_updated', 'v2');
                     localStorage.setItem('mtsn1_staff_list', JSON.stringify(this.staffList));
                 }
-                if (this.catalog.length === 0) {
+                if (this.catalog.length === 0 || localStorage.getItem('mtsn1_catalog_updated') !== 'v2') {
                     this.catalog = [...this.defaultCatalog];
+                    localStorage.setItem('mtsn1_catalog_updated', 'v2');
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
                 }
 
                 // Initialize Firebase Authentication & Realtime Cloud Listeners
