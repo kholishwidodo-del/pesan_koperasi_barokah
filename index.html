@@ -671,10 +671,16 @@
                                 <h3 class="font-bold text-slate-900 text-lg">Kelola Katalog Barang Resmi</h3>
                                 <p class="text-xs text-slate-500">Edit nama barang, harga satuan, dan satuan default yang tampil pada formulir pemesan.</p>
                             </div>
-                            <button @click="openAddCatalogModal" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5">
-                                <i class="fa-solid fa-plus"></i>
-                                <span>Tambah Barang Katalog</span>
-                            </button>
+                            <div class="flex items-center space-x-2">
+                                <button @click="saveCatalogToCloud(catalog); showToast('Katalog berhasil disinkronkan ke Cloud!', 'success');" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1">
+                                    <i class="fa-solid fa-rotate"></i>
+                                    <span>Sync Ke Semua HP</span>
+                                </button>
+                                <button @click="openAddCatalogModal" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-plus"></i>
+                                    <span>Tambah Barang Katalog</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -1140,30 +1146,36 @@ function handleRequest(e) {
                 async saveStaffToCloud(list) {
                     if (!this.currentUser) return;
                     try {
+                        const plainList = JSON.parse(JSON.stringify(list));
                         const staffDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'staff');
-                        await setDoc(staffDocRef, { list: list });
+                        await setDoc(staffDocRef, { list: plainList });
                     } catch (e) {
                         console.error("Error saving staff to cloud:", e);
+                        this.showToast('Gagal sinkron nama ke Cloud: ' + e.message, 'error');
                     }
                 },
 
                 async saveCatalogToCloud(items) {
                     if (!this.currentUser) return;
                     try {
+                        const plainItems = JSON.parse(JSON.stringify(items));
                         const catalogDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'catalog');
-                        await setDoc(catalogDocRef, { items: items });
+                        await setDoc(catalogDocRef, { items: plainItems });
                     } catch (e) {
                         console.error("Error saving catalog to cloud:", e);
+                        this.showToast('Gagal sinkron katalog ke Cloud: ' + e.message, 'error');
                     }
                 },
 
                 async saveOrderToCloud(order) {
                     if (!this.currentUser) return;
                     try {
+                        const plainOrder = JSON.parse(JSON.stringify(order));
                         const orderDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', String(order.id));
-                        await setDoc(orderDocRef, order);
+                        await setDoc(orderDocRef, plainOrder);
                     } catch (e) {
                         console.error("Error saving order to cloud:", e);
+                        this.showToast('Gagal menyimpan pesanan ke Cloud: ' + e.message, 'error');
                     }
                 },
 
@@ -1457,10 +1469,13 @@ function handleRequest(e) {
                 saveCatalogItem() {
                     if (this.isEditingCatalog) {
                         const idx = this.catalog.findIndex(c => c.id === this.catalogForm.id);
-                        if (idx !== -1) this.catalog[idx] = { ...this.catalogForm };
+                        if (idx !== -1) {
+                            this.catalog.splice(idx, 1, { ...this.catalogForm });
+                        }
                     } else {
                         this.catalog.push({ ...this.catalogForm });
                     }
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
                     this.saveCatalogToCloud(this.catalog);
                     this.showCatalogModal = false;
                     this.showToast('Katalog diperbarui & tersimpan di Cloud!', 'success');
@@ -1468,7 +1483,9 @@ function handleRequest(e) {
 
                 deleteCatalogItem(id) {
                     this.catalog = this.catalog.filter(c => c.id !== id);
+                    localStorage.setItem('mtsn1_catalog', JSON.stringify(this.catalog));
                     this.saveCatalogToCloud(this.catalog);
+                    this.showToast('Barang berhasil dihapus dari katalog', 'success');
                 },
 
                 // Spreadsheet Webhook Settings
